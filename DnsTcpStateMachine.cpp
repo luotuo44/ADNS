@@ -85,17 +85,17 @@ static std::string getError(const char* str)
     return std::string(buf);
 }
 
-void DnsTcpStateMachine::addQuery(int id, const std::string &domain, const std::string &dns_server, DnsQueryCB cb)
+void DnsTcpStateMachine::addQuery(const DnsQuery_t &query)
 {
     QueryPacketPtr q = std::make_shared<QueryPacket>();
-    q->id = id;
-    q->domain = domain;
-    q->dns_server = dns_server;
+    q->id = query.id;
+    q->domain = query.domain;
+    q->dns_server = query.dns_server;
 
-    q->query_type = DNSQueryType::A;
-    q->cb = cb;
+    q->query_type = query.query_type;
+    q->cb = query.cb;
 
-    int ret = Net::SocketOps::new_tcp_socket_connect_server(dns_server.c_str(), 53, &q->fd);
+    int ret = Net::SocketOps::new_tcp_socket_connect_server(query.dns_server.c_str(), 53, &q->fd);
     if( ret == -1 )
     {
         q->fail_reason = getError("new_tcp_socket_connect_server fail ");
@@ -153,12 +153,11 @@ void DnsTcpStateMachine::eventCB(int fd, int events, void *arg)
 
     if( events & EV_TIMEOUT )
     {
-        std::string reason = "timeout to wait for dns_server ";
-        LOG(Log::ERROR)<<reason<<it->second->dns_server<<" for query "<<it->second->domain;
+        it->second->fail_reason = "timeout to wait for dns_server ";
+        LOG(Log::ERROR)<<it->second->fail_reason<<it->second->dns_server<<" for query "<<it->second->domain;
         Net::Reactor::delEvent(it->second->ev);
-        it->second->fail_reason = std::move(reason);
-        replyResult(it->second, false);
         Net::SocketOps::close_socket(it->second->fd);
+        replyResult(it->second, false);
         m_querys.erase(it);
         return ;
     }
@@ -211,9 +210,15 @@ int DnsTcpStateMachine::driveMachine(QueryPacketPtr &q)
 
         case DnsTcpState::new_try:
             updateEvent(q, EV_WRITE|EV_PERSIST);
-            getDNSQueryPacket(q);
-
-            q->state = DnsTcpState::send_query;
+            if( getDNSQueryPacket(q) )
+                q->state = DnsTcpState::send_query;
+            else
+            {
+                q->fail_reason = "hostname format error ";
+                LOG(Log::ERROR)<<q->domain<<' '<<q->fail_reason;
+                query_state = -1;
+                q->state = DnsTcpState::stop_query_dns;
+            }
             break;
 
         case DnsTcpState::send_query:
@@ -313,9 +318,11 @@ int DnsTcpStateMachine::driveMachine(QueryPacketPtr &q)
 }
 
 
-void DnsTcpStateMachine::getDNSQueryPacket(QueryPacketPtr &query)
+bool DnsTcpStateMachine::getDNSQueryPacket(QueryPacketPtr &query)
 {
     std::string query_packet = DNS::getDNSPacket(query->id, query->query_type, query->domain);
+    if( query_packet.empty() )//format error
+        return false;
 
     query->w_buff.resize(query_packet.size() + 2);
 
@@ -323,6 +330,8 @@ void DnsTcpStateMachine::getDNSQueryPacket(QueryPacketPtr &query)
     ::memcpy(&query->w_buff[0], &t, 2);
     ::memcpy(&query->w_buff[2], query_packet.c_str(), query_packet.size());
     query->w_curr = 0;
+
+    return true;
 }
 
 

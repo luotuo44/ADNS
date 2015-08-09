@@ -10,6 +10,7 @@
 
 #include<arpa/inet.h>
 #include<netinet/in.h>
+#include<sys/types.h>
 
 #include<string.h>
 #include<assert.h>
@@ -18,6 +19,7 @@
 
 
 #include"SocketOps.hpp"
+#include"typedef.hpp"
 
 namespace ADNS
 {
@@ -65,16 +67,6 @@ typedef struct DNS_QUESTION_tag
     uint16_t qclass;
 }DNS_QUESTION_t;
 
-enum qtype
-{
-    A = 1,
-    NS = 2,
-    CNAME = 5,
-    PTR = 12,
-    HINFO = 13,
-    MX = 15
-};
-
 
 #pragma pack(push, 1)
 typedef struct ANSWER_tag
@@ -88,69 +80,91 @@ typedef struct ANSWER_tag
 }ANSWER_t;
 #pragma pack(pop)
 
-std::string getDNSPacket(int id, DNSQueryType type, const std::string &hostname)
+
+void appendHeaderPacket(DNS_HEADER_t *header, uint16_t id)
 {
-    char buff[1024];
+    assert(header != nullptr);
 
-    DNS_HEADER_t *head = (DNS_HEADER_t*)buff;
+    header->id = Net::SocketOps::htons(id);
 
+    {
+        header->flag.field.qr = 0;
+        header->flag.field.opcode = 0;
+        header->flag.field.aa = 0;
+        header->flag.field.tc = 0;
+        header->flag.field.rd = 1;
 
-    head->id = Net::SocketOps::htons(id);
+        header->flag.field.ra = 0;
+        header->flag.field.zero = 0;
+        header->flag.field.rcode = 0;
 
-    head->flag.field.qr = 0;
-    head->flag.field.opcode = 0;
-    head->flag.field.aa = 0;
-    head->flag.field.tc = 0;
-    head->flag.field.rd = 1;
+        header->flag.val = Net::SocketOps::htons(0x0100);
+    }
 
-    head->flag.field.ra = 0;
-    head->flag.field.zero = 0;
-    head->flag.field.rcode = 0;
-
-    head->flag.val = Net::SocketOps::htons(0x0100);
-
-    head->q_count = Net::SocketOps::htons(1);
-    head->a_count = 0;
-    head->auth_count = 0;
-    head->add_count = 0;
-
-
-    std::string ret = toDNSFormat(hostname);
-
-    int pos = sizeof(DNS_HEADER_t);
-    memcpy(buff+pos, ret.c_str(), ret.size());
-    //strncpy(buff+pos, ret.c_str(), ret.size());
-    pos += ret.size();
-
-    DNS_QUESTION_t *question_type = (DNS_QUESTION_t*)(buff+pos);
-
-    question_type->qtype = Net::SocketOps::htons(static_cast<int>(type));
-    question_type->qclass = Net::SocketOps::htons(1);
-    pos += sizeof(DNS_QUESTION_t);
-
-    return std::string(buff, buff+pos);
+    //just support only one question on a query
+    //http://forums.devshed.com/dns/183026-dns-packet-question-section-1-a-post793792.html#post793792
+    //http://stackoverflow.com/questions/4082081/requesting-a-and-aaaa-records-in-single-dns-query/4083071#4083071
+    header->q_count = Net::SocketOps::htons(1);
+    header->a_count = 0;
+    header->auth_count = 0;
+    header->add_count = 0;
 }
 
 std::string toDNSFormat(std::string hostname)
 {
-    hostname += ".";//追加一个'.'，方便循环
+    hostname += ".";//append one ".", convenient for loop
 
     std::string dst;
-
+    dst.reserve(hostname.size() + 4);
     std::string::size_type pos = 0, last = 0;
     while( (pos = hostname.find('.', last) ) != std::string::npos)
     {
         dst += static_cast<char>(pos-last);
-        dst.insert(dst.end(), hostname.begin()+last,
-                   hostname.begin() + pos);
-
+        dst.insert(dst.end(), hostname.begin()+last, hostname.begin() + pos);
         last = pos + 1;
     }
 
-    dst += static_cast<char>(0);//最后以0表示结束
+    dst += static_cast<char>(0);//end with 0
 
     return dst;
 }
+
+
+int appendQuestionPacket(char *buff, size_t left, DNSQueryType type, const std::string &hostname)
+{
+    std::string dns_format_domain = toDNSFormat(hostname);
+
+    size_t need_size = dns_format_domain.size() + sizeof(DNS_QUESTION_t);
+    if( need_size <= left)
+    {
+        memcpy(buff, dns_format_domain.c_str(), dns_format_domain.size());
+
+        DNS_QUESTION_t *question = reinterpret_cast<DNS_QUESTION_t*>(buff+dns_format_domain.size());
+        question->qtype = Net::SocketOps::htons(static_cast<int>(type));
+        question->qclass = Net::SocketOps::htons(1);
+    }
+
+    return need_size <= left ? need_size : -1;
+}
+
+
+std::string getDNSPacket(int id, DNSQueryType type, const std::string &hostname)
+{
+    constexpr int MAX_SIZE = 1024;
+    char buff[MAX_SIZE];
+
+    DNS_HEADER_t *header = (DNS_HEADER_t*)buff;
+    appendHeaderPacket(header, id);
+
+    constexpr int left = MAX_SIZE - sizeof(DNS_HEADER_t);
+    int len = appendQuestionPacket(buff + sizeof(DNS_HEADER_t), left, type, hostname);
+
+    if( len == -1 )
+        return std::string();
+    else
+        return std::string(buff, buff + sizeof(DNS_HEADER_t) + len);
+}
+
 
 
 std::string parseDNSFormat(const unsigned char *buff,
@@ -187,7 +201,7 @@ label:
     if( len >= 192 )
     {
         ++jump;//可能会多次跳转
-        if( count != NULL && jump == 1)//但只计算第一次跳转的字节
+        if( count != nullptr && jump == 1)//但只计算第一次跳转的字节
             *count = num + 2;//两个跳转字节
 
         //这里不使用ntohs因为不够两个字节
@@ -198,7 +212,7 @@ label:
     }
 
     ++num;
-    if( count != NULL && !jump)//没有跳转的时候才用这里的计数
+    if( count != nullptr && !jump)//没有跳转的时候才用这里的计数
         *count = num;
 
     //hostname.pop_back();//删除最后面的"."
@@ -213,32 +227,35 @@ std::string parseOneRecord(const unsigned char *buff,
                            const unsigned char *curr,
                            int *count, int *type)
 {
-    assert( type != NULL);
+    assert( type != nullptr);
+    static_assert(sizeof(ANSWER_t) == 10, "sizeof(ANSWER_t) should equals to 10");
 
-    ANSWER_t *answer = (ANSWER_t*)curr;
+    const ANSWER_t *answer = reinterpret_cast<const ANSWER_t*>(curr);
     int num = sizeof(ANSWER_t) + Net::SocketOps::ntohs(answer->data_len);
-
-
-    std::string name;
-
-    *type = Net::SocketOps::ntohs(answer->qtype);
-
-    if( *type == CNAME)//CNAME
-    {
-        name = parseDNSFormat(buff, answer->data, NULL);
-    }
-    else if( *type == A)//A
-    {
-        name = parseIP(answer->data);
-    }
-    else //其他类型不进行解析
-    {
-        name = "unknown result";
-    }
-
-
-    if( count != NULL )
+    if( count != nullptr )
         *count = num;
+
+    int mx_step = 0;
+    std::string name;
+    *type = Net::SocketOps::ntohs(answer->qtype);
+    switch(static_cast<DNSQueryType>(*type) )
+    {
+    case DNSQueryType::A:
+        name = parseIP(answer->data);
+        break;
+
+    case DNSQueryType::MX: //fall
+        mx_step = 2;//mx record has 16 bit preference
+    case DNSQueryType::NS: //fall
+    case DNSQueryType::CNAME:
+        name = parseDNSFormat(buff, answer->data + mx_step, nullptr);
+        break;
+
+
+    default://doesn't resolve other kind
+        name = "unknown result";
+        break;
+    }
 
     return name;
 }
@@ -249,54 +266,40 @@ std::string parseOneRecord(const unsigned char *buff,
 std::vector<std::string>
         parseDNSResultPacket(const unsigned char *buff, int len)
 {
-    (void)len;
 
     std::vector<std::string> str_vec;
-    DNS_HEADER_t *head = (DNS_HEADER_t*)buff;
+    const DNS_HEADER_t *header = reinterpret_cast<const DNS_HEADER_t*>(buff);
 
-    int answer_num = Net::SocketOps::ntohs(head->a_count);
-
+    int answer_num = Net::SocketOps::ntohs(header->a_count);
     if(answer_num <= 0 ) //doesn't have answer
         return str_vec;
 
 
     const unsigned char *query_start = buff + sizeof(DNS_HEADER_t);
     int count;
-    std::string hostname = parseDNSFormat(buff, query_start, &count);
+    parseDNSFormat(buff, query_start, &count);
+    const DNS_QUESTION_t *question = reinterpret_cast<const DNS_QUESTION_t*>(query_start + count);
+    int query_type = Net::SocketOps::ntohs(question->qtype);
 
-    //query type and query class
-    const unsigned char *answer_start = query_start + count + 2+2;
-
-    int type;
-
-    assert(sizeof(ANSWER_t) == 10);
-
+    const unsigned char *answer_start = query_start + count + sizeof(DNS_QUESTION_t);
+    int curr_type;
     do
     {   //answer domain
         parseDNSFormat(buff, answer_start, &count);
 
         answer_start += count;
-        std::string data = parseOneRecord(buff, answer_start,
-                                          &count, &type);
+        std::string data = parseOneRecord(buff, answer_start, &count, &curr_type);
 
-        if( type == CNAME )
-        {
-            //do nothing
-        }
-        else if( type == A)
-        {
-            str_vec.push_back(data);
-        }
-        else
-        {
-            fprintf(stderr, "unknown result\n");
-        }
+        if( query_type == curr_type && !data.empty())
+            str_vec.push_back(std::move(data));
 
         answer_start += count;
 
     }while(--answer_num );
 
     return str_vec;
+
+    (void)len;
 }
 
 
@@ -304,9 +307,13 @@ std::string parseIP(const unsigned char *buf)
 {
     const unsigned int *p = reinterpret_cast<const unsigned int*>(buf);
 
-    struct sockaddr_in addr;
-    addr.sin_addr.s_addr = *p;
-    return ::inet_ntoa(addr.sin_addr);
+    char dst[20];
+    const char *ret = ::inet_ntop(AF_INET, p, dst, sizeof(dst));
+
+    std::string str;
+    if( ret != nullptr)
+        str = ret;
+    return str;
 }
 
 }

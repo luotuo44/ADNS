@@ -131,17 +131,19 @@ void DnsExplorer::pipe_cb(int fd, int events, void *arg)
 bool DnsExplorer::handleNewRequest(DnsQuery_t &&query)
 {
     int id = m_minUnusedID.generateID();
-    if( id != -1 )
-    {
-        m_tcp_machine->addQuery(id, query.domain, query.dns_server, query.cb);
-        return true;
-    }
-    else
+    if( id == -1)
     {
         restoreRequest(std::move(query));
         updateEvent(m_pipe[0], EV_TIMEOUT, 5000);//wait for 5 seconds
         return false;
     }
+
+    if(query.query_procotol == DNSQueryProcotol::TCP)
+    {
+        m_tcp_machine->addQuery(query);
+    }
+
+    return true;
 }
 
 

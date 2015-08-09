@@ -29,6 +29,7 @@ public:
 
 
     void setResCB(DnsExplorerResCB &cb);
+    void addQuery(const DnsQuery_t &query);
     void addQuery(int id, const std::string &domain, const std::string &dns_server, DnsQueryCB cb);
     void eventCB(int fd, int events, void *arg);
 
@@ -40,7 +41,7 @@ private:
     void updateEvent(QueryPacketPtr &q, int events, int milliseconds =-1);
     void replyResult(QueryPacketPtr &q, bool success);
     int driveMachine(QueryPacketPtr &q);
-    void getDNSQueryPacket(QueryPacketPtr &query);
+    bool getDNSQueryPacket(QueryPacketPtr &query);
 private:
     EventCreater m_ev_creater;
     DnsExplorerResCB m_res_cb;

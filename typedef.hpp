@@ -20,7 +20,7 @@ enum class DNSQueryType
 {
     A = 1,
     NS = 2,
-    NAME = 5,
+    CNAME = 5,
     MX = 15
 };
 
@@ -29,11 +29,12 @@ enum class DNSQueryType
 enum class DNSQueryProcotol
 {
     TCP,
-    UDP
+    UDP,
+    UDP_OR_TCP //using udp query first, if it truncate, uses tcp
 };
 
 struct DnsQueryResult_t;
-typedef std::function<void (const DnsQueryResult_t&)> DnsQueryCB;
+using DnsQueryCB = std::function<void (const DnsQueryResult_t&)>;
 
 using RecordData = std::vector<std::string> ;
 

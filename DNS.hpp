@@ -21,7 +21,6 @@ namespace ADNS
 namespace DNS
 {
 
-std::string toDNSFormat(std::string hostname);
 std::string getDNSPacket(int id, DNSQueryType type, const std::string &hostname);
 
 
