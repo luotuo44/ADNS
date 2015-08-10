@@ -22,7 +22,7 @@ RecordData DnsCache::query(const DnsQuery_t &query)
 
 void DnsCache::flush(const DnsQueryResult_t &result)
 {
-    m_domain_tree.addRecord(result.domain, result.query_type, result.record_data);
+    m_domain_tree.addRecord(result.domain, result.query_type, result.record_data, result.ttl);
 }
 
 }

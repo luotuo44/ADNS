@@ -61,21 +61,6 @@ DomainTree::~DomainTree()
     clearTree();
 }
 
-//DomainTree::DomainTree(const DomainTree& tree)
-//    : m_root(std::make_shared<DomainNode>("."))
-//{
-//    copyTree(m_root, tree.m_root);
-//}
-
-
-//DomainTree& DomainTree::operator = (const DomainTree& tree)
-//{
-//    if( this == &tree)
-//        return *this;
-
-//    clearTree();
-//    copyTree(m_root, tree.m_root);
-//}
 
 
 void DomainTree::copyTree(DomainNodePtr &dst, const DomainNodePtr &src)
@@ -128,7 +113,7 @@ Iter DomainTree::findNode(Iter b, Iter e, DomainNodePtr &node)
 }
 
 
-void DomainTree::addRecord(const std::string &domain, DNSQueryType type, const RecordData &data)
+void DomainTree::addRecord(const std::string &domain, DNSQueryType type, const RecordData &data, int ttl)
 {
     assert(!domain.empty() && !data.empty());
 
@@ -154,24 +139,37 @@ void DomainTree::addRecord(const std::string &domain, DNSQueryType type, const R
     Record re;
     re.type = type;
     re.data = data;
+    re.ttl = ttl;
+    re.start_point = std::chrono::steady_clock::now();
     (*node->records)[type] = std::move(re);
 }
 
 
 //if no record, the returned vector will be empty
-RecordData DomainTree::queryRecord(const std::string &domain, DNSQueryType type)
+RecordData DomainTree::queryRecord(const std::string &domain, DNSQueryType type)const
 {
+    //printfTree();
     Utility::StringToken::TokenList tokens =  Utility::StringToken::splitTokens(domain, ".");
     tokens.reverse();
 
     DomainNodePtr node = m_root;
     auto it = findNode(tokens.begin(), tokens.end(), node);
 
-    RecordMap::iterator iter;
-    if( it != tokens.end() || !node->leaf || (iter = node->records->find(type)) == node->records->end())
-        return RecordData();
-    else
+    do
+    {
+        RecordMap::iterator iter;
+        if( it != tokens.end() || !node->leaf || (iter = node->records->find(type)) == node->records->end())
+            break;
+        
+        auto now = std::chrono::steady_clock::now();
+        if( (now - iter->second.start_point) >= std::chrono::seconds(iter->second.ttl))
+            break;
+        
         return iter->second.data;
+
+    }while(0);
+
+    return RecordData();
 }
 
 
@@ -269,6 +267,17 @@ void doPrintfTree(const DomainNodePtr &node, std::list<std::string> &zones)
         });
 
         std::cout<<"\b "<<std::endl;
+
+        assert(node->records);
+        for(auto &e : *node->records)
+        {
+            std::cout<<"\t"<<static_cast<int>(e.first)<<"\t ttl: "<<e.second.ttl<<"\t";
+            for(auto &ee : e.second.data)
+                std::cout<<ee<<"\t";
+            std::cout<<std::endl;
+        }
+
+        std::cout<<std::endl;
     }
 
     for(auto it = node->branch.begin(); it != node->branch.end(); ++it)

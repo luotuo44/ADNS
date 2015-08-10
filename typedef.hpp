@@ -58,6 +58,7 @@ struct DnsQueryResult_t
 
     std::string domain;
     std::string dns_server;
+    int ttl;
 
     RecordData record_data;
     DNSQueryType query_type;

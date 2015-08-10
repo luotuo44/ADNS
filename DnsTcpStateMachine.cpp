@@ -47,12 +47,13 @@ struct DnsTcpStateMachine::QueryPacket
     std::string dns_server;//ip
     DNSQueryType query_type;
     DnsQueryCB cb;
+    uint32_t ttl;
 
     RecordData ips;//dns query result
 
-    std::vector<unsigned char> r_buff;
+    std::vector<char> r_buff;
     int r_curr;
-    std::vector<unsigned char> w_buff;
+    std::vector<char> w_buff;
     int w_curr;
 
     std::string fail_reason;
@@ -128,6 +129,7 @@ void DnsTcpStateMachine::replyResult(QueryPacketPtr &q, bool success)
     res.record_data = std::move(q->ips);
     res.query_type = q->query_type;
     res.cb = q->cb;
+    res.ttl = q->ttl;
     //res.cb should set by DnsExplorer
 
     m_res_cb(std::move(res));
@@ -287,7 +289,7 @@ int DnsTcpStateMachine::driveMachine(QueryPacketPtr &q)
             break;
 
         case DnsTcpState::parse_query_result:
-            q->ips = DNS::parseDNSResultPacket(&q->r_buff[2], q->r_buff.size()-2);
+            q->ips = DNS::parseDNSResultPacket(&q->r_buff[2], q->r_buff.size()-2, q->ttl);
             if( q->ips.empty() )//error result
             {
                 q->fail_reason = "fail to parse dns server response packet";

@@ -76,7 +76,7 @@ typedef struct ANSWER_tag
     uint32_t ttl;
     uint16_t data_len;
 
-    unsigned char data[];
+    char data[];
 }ANSWER_t;
 #pragma pack(pop)
 
@@ -167,9 +167,7 @@ std::string getDNSPacket(int id, DNSQueryType type, const std::string &hostname)
 
 
 
-std::string parseDNSFormat(const unsigned char *buff,
-                           const unsigned char *curr,
-                           int *count)
+std::string parseDNSFormat(const char *buff, const char *curr, int *count)
 {
     int num = 0;
     int len;
@@ -177,9 +175,11 @@ std::string parseDNSFormat(const unsigned char *buff,
     int jump = 0;
     std::string hostname;
 
-    len = curr[0];
+    const unsigned char *start = reinterpret_cast<const unsigned char*>(buff);
+    const unsigned char *p = reinterpret_cast<const unsigned char*>(curr);
+    len = p[0];
 
-    const unsigned char *p = curr + 1;
+    ++p;
 
 label:
 
@@ -206,7 +206,7 @@ label:
 
         //这里不使用ntohs因为不够两个字节
         offset = ((p[-1]&0x3F)<<8) + *p;//0x3F = 0011 1111
-        p = buff + offset;
+        p = start + offset;
         len = *p++;
         goto label;
     }
@@ -215,6 +215,7 @@ label:
     if( count != nullptr && !jump)//没有跳转的时候才用这里的计数
         *count = num;
 
+    assert(!hostname.empty());
     //hostname.pop_back();//删除最后面的"."
     hostname.erase(hostname.end()-1);
 
@@ -223,22 +224,18 @@ label:
 
 
 
-std::string parseOneRecord(const unsigned char *buff,
-                           const unsigned char *curr,
-                           int *count, int *type)
+std::string parseOneRecord(const char *buff, const char *curr, int &count, int &type, uint32_t &ttl)
 {
-    assert( type != nullptr);
     static_assert(sizeof(ANSWER_t) == 10, "sizeof(ANSWER_t) should equals to 10");
 
     const ANSWER_t *answer = reinterpret_cast<const ANSWER_t*>(curr);
-    int num = sizeof(ANSWER_t) + Net::SocketOps::ntohs(answer->data_len);
-    if( count != nullptr )
-        *count = num;
+    count = sizeof(ANSWER_t) + Net::SocketOps::ntohs(answer->data_len);
+    ttl = Net::SocketOps::ntohl(answer->ttl);
+    type = Net::SocketOps::ntohs(answer->qtype);
 
     int mx_step = 0;
     std::string name;
-    *type = Net::SocketOps::ntohs(answer->qtype);
-    switch(static_cast<DNSQueryType>(*type) )
+    switch(static_cast<DNSQueryType>(type) )
     {
     case DNSQueryType::A:
         name = parseIP(answer->data);
@@ -251,7 +248,6 @@ std::string parseOneRecord(const unsigned char *buff,
         name = parseDNSFormat(buff, answer->data + mx_step, nullptr);
         break;
 
-
     default://doesn't resolve other kind
         name = "unknown result";
         break;
@@ -263,10 +259,9 @@ std::string parseOneRecord(const unsigned char *buff,
 
 
 //buff jump the length message in the tcp-dns packet
-std::vector<std::string>
-        parseDNSResultPacket(const unsigned char *buff, int len)
+std::vector<std::string> parseDNSResultPacket(const char *buff, int len, uint32_t &ttl)
 {
-
+    int count, curr_type;
     std::vector<std::string> str_vec;
     const DNS_HEADER_t *header = reinterpret_cast<const DNS_HEADER_t*>(buff);
 
@@ -275,20 +270,18 @@ std::vector<std::string>
         return str_vec;
 
 
-    const unsigned char *query_start = buff + sizeof(DNS_HEADER_t);
-    int count;
+    const char *query_start = buff + sizeof(DNS_HEADER_t);
     parseDNSFormat(buff, query_start, &count);
     const DNS_QUESTION_t *question = reinterpret_cast<const DNS_QUESTION_t*>(query_start + count);
     int query_type = Net::SocketOps::ntohs(question->qtype);
 
-    const unsigned char *answer_start = query_start + count + sizeof(DNS_QUESTION_t);
-    int curr_type;
+    const char *answer_start = query_start + count + sizeof(DNS_QUESTION_t);
     do
     {   //answer domain
         parseDNSFormat(buff, answer_start, &count);
 
         answer_start += count;
-        std::string data = parseOneRecord(buff, answer_start, &count, &curr_type);
+        std::string data = parseOneRecord(buff, answer_start, count, curr_type, ttl);
 
         if( query_type == curr_type && !data.empty())
             str_vec.push_back(std::move(data));
@@ -303,9 +296,9 @@ std::vector<std::string>
 }
 
 
-std::string parseIP(const unsigned char *buf)
+std::string parseIP(const char *buf)
 {
-    const unsigned int *p = reinterpret_cast<const unsigned int*>(buf);
+    const int *p = reinterpret_cast<const int*>(buf);
 
     char dst[20];
     const char *ret = ::inet_ntop(AF_INET, p, dst, sizeof(dst));

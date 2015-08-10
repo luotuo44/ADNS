@@ -35,9 +35,9 @@ public:
 
     void swap(DomainTree &tree);
 
-    void addRecord(const std::string &domain, DNSQueryType type, const RecordData &data);
+    void addRecord(const std::string &domain, DNSQueryType type, const RecordData &data, int ttl);
     //if no record, the returned vector will be empty
-    RecordData queryRecord(const std::string &domain, DNSQueryType type);
+    RecordData queryRecord(const std::string &domain, DNSQueryType type)const;
     void addDomain(const std::string &domain);
     void delDomain(const std::string &domain);
     bool hasDomain(const std::string &domain);
@@ -50,7 +50,7 @@ private:
 
 
     template<typename Iter>
-    Iter findNode(Iter b, Iter e, DomainNodePtr &node);
+    static Iter findNode(Iter b, Iter e, DomainNodePtr &node);
 
 private:
     DomainNodePtr m_root;

@@ -95,11 +95,6 @@ int main()
     clientPtr->addQuery(query);
     ++g_query_num;
 
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    query.domain = "www.qq.com";
-    query.id = 54;
-    clientPtr->addQuery(query);
-    ++g_query_num;
 
     query.domain = "www.qq.com";
     query.id = 28;
@@ -108,13 +103,22 @@ int main()
     ++g_query_num;
 
     query.domain = "qq.com";
-    query.id = 444;
-    query.query_type = DNSQueryType::NS;
+    query.id = 344;
+    query.query_type = DNSQueryType::MX;
     clientPtr->addQuery(query);
     ++g_query_num;
 
-    query.id = 344;
-    query.query_type = DNSQueryType::MX;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    query.domain = "www.qq.com";
+    query.id = 54;
+    query.query_type = DNSQueryType::A;
+    clientPtr->addQuery(query);
+    ++g_query_num;
+
+
+    query.domain = "qq.com";
+    query.id = 444;
+    query.query_type = DNSQueryType::NS;
     clientPtr->addQuery(query);
     ++g_query_num;
 
