@@ -150,7 +150,7 @@ int appendQuestionPacket(char *buff, size_t left, DNSQueryType type, const std::
 
 std::string getDNSPacket(int id, DNSQueryType type, const std::string &hostname)
 {
-    constexpr int MAX_SIZE = 1024;
+    constexpr int MAX_SIZE = 512;
     char buff[MAX_SIZE];
 
     DNS_HEADER_t *header = (DNS_HEADER_t*)buff;

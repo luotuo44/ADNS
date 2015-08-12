@@ -27,9 +27,9 @@
 #include"CurrentThread.hpp"
 #include"MutexLock.hpp"
 
+
 namespace ADNS
 {
-
 
 namespace Net
 {
@@ -160,7 +160,7 @@ class Event
 public:
     Event(int fd, int events, EVENT_CB cb, void *arg)
         : m_fd(fd), m_events(events), m_re_events(0),
-          m_cb(cb), m_arg(arg),
+          m_cb(cb), m_arg(arg), m_internal(0),
           m_state(EV_STATE::S_FREE), m_is_internal(false)
     {}
 
@@ -172,7 +172,7 @@ public:
     void *m_arg;
     int m_internal;//Millisecond
     EV_STATE m_state;
-    bool m_is_internal;//is the internal for reactor
+    bool m_is_internal;//it is internal for reactor
 
     std::chrono::milliseconds m_duration;
     std::chrono::steady_clock::time_point m_active_time;
@@ -276,6 +276,8 @@ void Reactor::Impl::handleActiveEvent()
         it->second->m_cb(it->second->m_fd, it->second->m_re_events, it->second->m_arg);
         m_active_events.erase(it++);
     }
+
+    assert(m_active_events.empty());
 }
 
 
@@ -326,7 +328,8 @@ int Reactor::Impl::minTimerDuration()const//milliseconds
         return -1;
 
     EventPtr ev = m_timer_events.front();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(ev->m_active_time - std::chrono::steady_clock::now()).count();
+    auto ret = std::chrono::duration_cast<std::chrono::milliseconds>(ev->m_active_time - std::chrono::steady_clock::now()).count();
+    return ret > 0 ? ret : 0;
 }
 
 
@@ -495,7 +498,7 @@ void Reactor::AsyncEvent::handleNotifyEvent(int fd, int events, void *arg)
             MutexLock lock(m_add_list.mutex);
             EventPtr ev = std::move(m_add_list.ev_list.front());
             m_add_list.ev_list.pop_front();
-            Reactor::addEvent(ev);
+            Reactor::addEvent(ev, ev->m_internal);
             break;
         }
 
@@ -623,7 +626,10 @@ bool Reactor::addEvent(EventPtr &ev, int millisecond)
         }
 
         if( (ev->m_events & EV_TIMEOUT) && millisecond > 0)
+        {
+            ev->m_internal = millisecond;
             ev->m_duration = std::chrono::milliseconds(millisecond);
+        }
 
         //internal event for reactor, those event need to add then reactor is created
         if( ev->m_is_internal )

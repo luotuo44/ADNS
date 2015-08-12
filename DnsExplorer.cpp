@@ -19,6 +19,7 @@
 #include"Reactor.hpp"
 #include"SocketOps.hpp"
 #include"DnsTcpStateMachine.hpp"
+#include"DnsUdpStateMachine.hpp"
 
 namespace ADNS
 {
@@ -28,6 +29,7 @@ DnsExplorer::DnsExplorer(EventCreater &ev_creater)
     : m_ev_creater(ev_creater),
       m_pipe{-1, -1},
       m_tcp_machine(std::make_shared<DnsTcpStateMachine>(ev_creater)),
+      m_udp_machine(std::make_shared<DnsUdpStateMachine>(ev_creater)),
       m_minUnusedID(2048)
 {
     assert(ev_creater);
@@ -55,7 +57,7 @@ void DnsExplorer::init()
 
     DnsExplorerResCB cb = std::bind(&DnsExplorer::DnsResultCB, this, std::placeholders::_1);
     m_tcp_machine->setResCB(cb);
-    //m_udp_machine->setResCB(cb);
+    m_udp_machine->setResCB(cb);
 }
 
 
@@ -139,9 +141,9 @@ bool DnsExplorer::handleNewRequest(DnsQuery_t &&query)
     }
 
     if(query.query_procotol == DNSQueryProcotol::TCP)
-    {
         m_tcp_machine->addQuery(query);
-    }
+    else if( query.query_procotol == DNSQueryProcotol::UDP)
+        m_udp_machine->addQuery(query);
 
     return true;
 }

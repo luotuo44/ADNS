@@ -111,7 +111,6 @@ void DnsTcpStateMachine::addQuery(const DnsQuery_t &query)
     else
         q->state = DnsTcpState::connecting_dns;
 
-    Net::Reactor::addEvent(q->ev);
     m_querys[q->fd] = q;
 }
 
@@ -173,7 +172,7 @@ void DnsTcpStateMachine::eventCB(int fd, int events, void *arg)
         m_querys.erase(it);
     }
 
-    (void)events;(void)arg;
+    (void)arg;
 }
 
 

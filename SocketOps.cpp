@@ -212,6 +212,36 @@ bool refuse_connect(int err)
 
 
 
+int new_udp_socket()
+{
+    return ::socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+
+int udp_write(int fd, const char *data, int len, const char *server_ip)
+{
+    assert(fd >= 0 && data != nullptr && len >= 0 );
+
+    struct sockaddr_in addr;
+    constexpr socklen_t serv_len = sizeof(struct sockaddr_in);
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = Net::SocketOps::htons(53);
+    int ret = ::inet_pton(AF_INET, server_ip, &addr.sin_addr);
+    if( ret <= 0 )
+        return -1;
+
+    return ::sendto(fd, data, len, 0, reinterpret_cast<SA*>(&addr), serv_len);
+}
+
+
+int udp_read(int fd, char *buf, int len)
+{
+    assert(fd >= 0 && buf != nullptr && len >= 0);
+
+    return ::recvfrom(fd, buf, len, 0, nullptr, nullptr);
+}
+
 //-1: system call error
 //0: write 0 byte
 //positive number : write bytes

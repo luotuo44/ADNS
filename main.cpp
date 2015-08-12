@@ -80,7 +80,7 @@ int main()
     query.domain = "www.baidu.com";
     query.id = 34;
     query.query_type = DNSQueryType::A;
-    query.query_procotol = DNSQueryProcotol::TCP;
+    query.query_procotol = DNSQueryProcotol::UDP;
 
     clientPtr->addQuery(query);
     ++g_query_num;
@@ -108,7 +108,7 @@ int main()
     clientPtr->addQuery(query);
     ++g_query_num;
 
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     query.domain = "www.qq.com";
     query.id = 54;
     query.query_type = DNSQueryType::A;

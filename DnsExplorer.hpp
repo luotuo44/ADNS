@@ -25,7 +25,9 @@ class Event;
 typedef std::shared_ptr<Event> EventPtr;
 
 class DnsTcpStateMachine;
-typedef std::shared_ptr<DnsTcpStateMachine> DnsTcpStateMachinePtr;
+using DnsTcpStateMachinePtr = std::shared_ptr<DnsTcpStateMachine>;
+class DnsUdpStateMachine;
+using DnsUdpStateMachinePtr = std::shared_ptr<DnsUdpStateMachine>;
 
 class DnsExplorer
 {
@@ -61,6 +63,7 @@ private:
     Mutex m_request_mutex;
 
     DnsTcpStateMachinePtr m_tcp_machine;
+    DnsUdpStateMachinePtr m_udp_machine;
     Utility::MinUnusedID m_minUnusedID;
 };
 

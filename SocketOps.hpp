@@ -44,6 +44,10 @@ bool wait_to_connect(int err);
 bool refuse_connect(int err);
 
 
+int new_udp_socket();
+int udp_write(int fd, const char *data, int len, const char *server_ip);
+int udp_read(int fd, char *buf, int len);
+
 int write(int fd, char *buf, int len);
 int read(int fd, char *buf, int len);
 
